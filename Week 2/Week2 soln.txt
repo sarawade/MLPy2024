@@ -1,0 +1,778 @@
+###week02_ex1a_start_md
+This is a typical supervised learning task since you are given labeled training examples (each instance comes with the expected output, i.e., the district's median housing price).
+###week02_ex1a_end
+
+###week02_ex1b_start_md
+This is a typical regression task, since you are asked to predict a value. More specifically, this is a multiple regression problem since the system will use multiple features to make a prediction (it will use the district's population, the median income, etc.). It is also a univariate regression problem since we are only trying to predict a single value for each district. If we were trying to predict multiple values per district, it would be a multivariate regression problem.
+###week02_ex1b_end
+
+###week02_ex1c_start_md
+This will be a different task than the previous problem. In this case, getting the price perfectly right is not important at all; your system just needs to get the category right. If that’s so, then the problem should have been framed as a classification task, not a regression task. 
+###week02_ex1c_end
+
+###week02_ex2_start_md
+There are 20640 instances in the dataset but `total_bedrooms` only has 20433 non-null values. This means that 207 districts are missing this feature. As most machine learning models cannot handle missing data, we will need to take care of this later.
+
+Furthermore, `ocean_proximity` has the `Dtype` of `object`. This could hold all sorts of different Python object types, but in this case we know it is a text attribute. This will require some preparation for our models to be able to handle this categorical attribute.
+###week02_ex2_end
+
+###week02_ex3_start_py
+housing.describe().round(2)
+###week02_ex3_switch_md
+From the descriptive statistics we can see that the features all have very different scales.
+###week02_ex3_switch_py
+%matplotlib inline
+import matplotlib.pyplot as plt
+import seaborn as sns
+fig, axes = plt.subplots(figsize=(15,10), ncols=3, nrows=3)
+axes = axes.flatten()
+for i, ax in enumerate(axes):
+    sns.histplot(data = housing.iloc[:,i], bins=50, ax=ax)
+    ax.set_title(housing.iloc[:,i].name)
+    ax.set_ylabel("")
+    ax.set_xlabel("")
+
+plt.tight_layout()
+plt.show()
+###week02_ex3_switch_md
+Many of the histograms are tail heavy: they extend much farther to the right of the median than to the left. This may make it a bit harder for some Machine Learning algorithms to detect patterns. We will try transforming these attributes later on to have more bell-shaped distributions.
+###week02_ex3_end
+
+###week02_ex4_start_py
+housing["ocean_proximity"].value_counts()
+###week02_ex4_switch_md
+Assuming there are no missing values, we have 5 possible categories. As shown above most properties are either `<1H OCEAN` or `INLAND`, with some near the ocean or bay and only 4 `ISLAND` observations. As there are so few `ISLAND` observations this category may not be that useful.
+###week02_ex4_end
+
+###week02_ex5_start_py
+from sklearn.model_selection import train_test_split
+train_set, test_set = train_test_split(housing, train_size=0.77, shuffle=False)
+
+display(train_set)
+display(test_set)
+###week02_ex5_switch_md
+In lots of real world ML applications you train on historical data, and make predictions on future unseen data. If this was the case we may want our data sorted by timestamp before creating the splits, since it matches the way you'll apply the model in the real world.
+
+However, in this case where we do not have a timestamp, we probably want to shuffle our data first because the ordering may effect our assessment of generalisation performance. The ordering of the data depends on where it came from and how it was exported and it's not uncommon that real world data is sorted in some manner. Therefore if there is an order according to one of the attributes, we could have a very poor test set (e.g. if it was ordered by "ocean_proximity" we would never learn from observations near the ocean).
+###week02_ex5_end
+
+###week02_ex6_start_py
+import numpy as np
+
+# Adapted from https://github.com/ageron/handson-ml2/blob/master/02_end_to_end_machine_learning_project.ipynb
+def split_train_test_manual(data, train_size, random_state=42, shuffle=True):
+    if shuffle:
+        r = np.random.RandomState(random_state)      # Use the class to avoid impacting the global numpy state
+        indices = r.permutation(len(data))
+    else:
+        indices = data.index.values
+    train_size = int(len(data) * train_size)
+    test_indices = indices[train_size:]
+    train_indices = indices[:train_size]
+    return data.loc[train_indices], data.loc[test_indices]
+
+train_set_manual, test_set_manual = split_train_test_manual(housing, train_size=0.77, shuffle=False)
+
+display(train_set.equals(train_set_manual))
+display(test_set.equals(test_set_manual))
+###week02_ex6_end
+
+###week02_ex7_start_py
+y_attribute = "median_house_value"
+
+housing_ = housing.copy()
+housing_[y_attribute+"_cat"] = pd.cut(housing_[y_attribute],
+                                      bins=[0.,100000.,200000.,300000.,400000., np.inf],
+                                      labels=range(5))
+
+fig, axes = plt.subplots(figsize = (10,5), ncols=2)
+housing_[y_attribute].hist(ax=axes[0])
+housing_[y_attribute+"_cat"].hist(ax=axes[1])
+axes[0].set_title(y_attribute)
+axes[1].set_title(y_attribute+"_cat")
+plt.show()
+
+train_set, test_set = train_test_split(housing_, train_size=0.77, 
+                                        stratify = housing_[[y_attribute+"_cat"]])
+train_shuf, test_shuf = train_test_split(housing_, train_size=0.77)
+
+for set_ in (train_set, test_set):
+    set_.drop(y_attribute+"_cat", axis=1, inplace=True)
+###week02_ex7_end
+
+###week02_ex8_start_py
+# https://github.com/ageron/handson-ml2/blob/master/02_end_to_end_machine_learning_project.ipynb
+import matplotlib.image as mpimg
+
+# Download the California image
+images_path = os.path.join("images")
+os.makedirs(images_path, exist_ok=True)
+filename = "california.png"
+filepath = os.path.join(images_path, filename)
+
+if not os.path.exists(filepath):
+    print("Downloading", filename)
+    url = "https://raw.githubusercontent.com/ageron/handson-ml2/master/images/end_to_end_project/"+filename
+    urllib.request.urlretrieve(url, os.path.join(images_path, filename))
+
+california_img=mpimg.imread(os.path.join(images_path, filename))
+ax = explore_set.plot(kind="scatter", x="longitude", y="latitude", 
+                  figsize=(10,7),
+                  s=explore_set['population']/100, 
+                  label="Population",
+                  c="median_house_value", 
+                  cmap=plt.get_cmap("jet"),
+                  colorbar=False, 
+                  alpha=0.4) # setting alpha ensures dense areas are more clear
+plt.imshow(california_img, extent=[-124.55, -113.80, 32.45, 42.05], alpha=0.5,
+           cmap=plt.get_cmap("jet"))
+plt.ylabel("Latitude", fontsize=14)
+plt.xlabel("Longitude", fontsize=14)
+
+prices = explore_set["median_house_value"]
+tick_values = np.linspace(prices.min(), prices.max(), 11)
+cbar = plt.colorbar(ticks=tick_values/prices.max())
+cbar.ax.set_yticklabels(["$%dk"%(round(v/1000)) for v in tick_values], fontsize=14)
+cbar.set_label('Median House Value', fontsize=16)
+
+plt.legend(fontsize=16)
+plt.show()
+###week02_ex8_switch_md
+We can clearly see there are a number of dense areas around the Bay Area, Los Angeles, San Diego, and the Central Valley (Sacramento and Fresno). House prices are very related to the location, with distance from the ocean being a key factor.
+
+From examining this you may want to use clustering algorithms to create new features - we'll learn about this in a future week.
+
+__Note__
+- The code above is a bit "extra" than what you would need to answer the question, so don't worry about the details of the code above too much unless you want to do similar visualisations in the future.
+###week02_ex8_end
+
+###week02_ex9_start_py
+explore_set_ = explore_set.drop("median_house_value", axis=1)
+sns.heatmap(explore_set_.corr(), annot=True, fmt='.2f', linewidths=2)
+plt.title("Figure X. Correlation Heatmap")
+plt.show()
+###week02_ex9_switch_md
+From the correlation heatmap above, we can clearly see that there are a number of highly correlated varibles in our dataset; specifcally, `total_rooms`, `total_bedrooms`, `population`, and `households`. This seems somewhat unsurprising as the more houses there are, there is likely to be more people who live there, more bedrooms, and more rooms in general. When we begin feature engineering, we may want to only keep one of these features to reduce multicolinearity or combine them into a new feature (see later).
+###week02_ex9_end
+
+###week02_ex10_start_py
+from scipy import stats
+import numpy as np
+
+explore_set_na_rm = explore_set.dropna()
+for i, feature in enumerate(explore_set):
+    if not str(explore_set_na_rm[feature].dtypes) == "object":
+        corr = pd.DataFrame(stats.pearsonr(explore_set_na_rm[feature], explore_set_na_rm[y_attribute]), 
+                            index = ["cor", "p-value"],
+                            columns = [feature])
+        if i ==0:
+            all_corr = corr
+        else:
+            all_corr = pd.concat([all_corr, corr], axis = 1)
+        
+display(all_corr.round(3).sort_values(by="cor", axis=1))
+###week02_ex10_switch_md
+We can see that a number of features are at least significantly weakly correlated with the output variable, apart from the population. `median_income` appears to be the most correlated variable.
+
+We may want to drop any feature that is not significantly correlated with out target varible. Dropping features that are not significantly correlated with the target label may improve your model accuracy if using a simple _linear_ model. However if you are using a non-linear classifier, that can combine features inside the learning model, then you may actually be loosing useful information as this may have a more complex relationship. In that instance other feature selection techniques will be more appropriate (see week 4).
+
+Furthermore, there are limitations to looking too much into the correlation results. Correlation analysis can be affected by outliers (which we have not dealt with yet), and the correlation p-value is going to be affected by the precision of the estimate (sample size). For example, the magnitude of effect may be small but the p-value can be "significant" if the sample size is large.
+###week02_ex10_end
+
+###week02_ex11_start_py
+dup_num = pd.DataFrame(X_train).duplicated().sum()
+print("There are {} duplicated values in this data".format(dup_num))
+###week02_ex11_end
+
+###week02_ex12_start_py
+fig, axes = plt.subplots(figsize = (15,5), ncols=X_train.shape[-1]//2, nrows=2, sharex=True)
+axes = axes.flatten()
+
+for i, ax in enumerate(axes):
+    sns.boxplot(y=X_train[:,i], ax = ax) 
+    ax.set_title(features[i])
+    ax.set_ylabel("")
+    
+plt.suptitle("Boxplots")
+plt.tight_layout()
+plt.show()
+###week02_ex12_switch_md
+From the boxplots above, we can see that a number of observations fall outside of the 75th quantiles. 
+###week02_ex12_end
+
+###week02_ex13_start_py
+import numpy as np
+
+def find_boundaries(array1D, fold):
+    upper_quant = pd.Series(array1D).quantile(0.75)
+    lower_quant = pd.Series(array1D).quantile(0.25)
+    IQR = upper_quant - lower_quant
+    lower_boundary = lower_quant - (IQR * fold) 
+    upper_boundary = upper_quant + (IQR * fold)
+    
+    return upper_boundary, lower_boundary
+
+for fold in [1.5, 3]:
+    
+    fold_info = pd.DataFrame()
+
+    for ix in range(X_train.shape[1]-1):
+        upper_boundary, lower_boundary = find_boundaries(X_train[:,ix], fold)
+
+        outliers = np.where(X_train[:,ix] > upper_boundary, True, 
+                            np.where(X_train[:,ix] < lower_boundary, True, False))
+    
+        variable_info=pd.DataFrame([upper_boundary, lower_boundary, len(outliers)], 
+                                   columns = [features[i]], index=["Upper", "Lower", "Outliers"])
+        
+        if fold_info.empty:
+            fold_info = variable_info
+        else:
+            fold_info = pd.concat([fold_info, variable_info], axis=1)
+            
+    print("Fold = {}".format(fold))
+    display(fold_info)
+###week02_ex13_switch_md
+Changing the `fold` to 1.5 is typically used to indicate an "outlier" and 3 for "far out" data<sup>1</sup>. The smaller the fold the larger the number of outliers detected.
+
+The varibles with the most outliers removed generally appear to be those with the most skewed distributions. Indeed it is known that when using this method on skewed data, many observations will be erroneously declared as outliers<sup>2</sup>.
+
+1. Tukey, John W (1977). Exploratory Data Analysis. Addison-Wesley. ISBN 978-0-201-07616-5. OCLC 3058187.
+2. Hubert, M., & Vandervieren, E. (2008). An adjusted boxplot for skewed distributions. Computational statistics & data analysis, 52(12), 5186-5201.
+###week02_ex13_end
+
+###week02_ex14_start_py
+def iqr_na(X, y=None, fold=1.5, tail="both"):
+    X_ = X.copy()
+    for i in range(X_.shape[1]):
+        upper_boundary_, lower_boundary_ = find_boundaries(X_[:,i], fold)
+        if tail in ['both', 'left']:
+            X_[:,i] = np.where(X_[:,i] < lower_boundary_, np.nan, X_[:,i])
+        if tail in ['both', 'right']:
+            X_[:,i] = np.where(X_[:,i] > upper_boundary_, np.nan, X_[:,i])
+    return X_
+    
+iqr_transformer = FunctionTransformer(func=iqr_na, kw_args={"tail":"right"})   
+
+X_train_iqr = X_train.copy()
+X_train_iqr[:,:-1] = iqr_transformer.fit_transform(X_train_iqr[:,:-1])
+pd.DataFrame(X_train_iqr, columns=features).max()
+    
+print("Before")
+X_train_df = pd.DataFrame(X_train, columns=features)
+display(X_train_df.isna().sum())
+display(X_train_df.max())
+
+print("After")    
+X_train_iqr_df=pd.DataFrame(X_train_iqr, columns=features)
+display(X_train_iqr_df.isna().sum())
+display(X_train_iqr_df.max())
+###week02_ex14_end
+
+###week02_ex15_start_py
+# importing module
+import warnings
+from sklearn.base import BaseEstimator, TransformerMixin
+  
+# adding a single entry into warnings filter
+warnings.simplefilter('error', UserWarning)
+
+class IQR_limits(BaseEstimator, TransformerMixin):
+    def __init__(self, fold=1.5, tail='both', variables=None): 
+        """
+        fold: The fold used to calculate the limits of the Tukey fence
+        tail: Whether to use just the 'left', 'right', or both limits
+        variables: what columns to apply the transformation to. If a 
+                   numpy array this is a list of column indexes (ints). 
+                   If a dataframe then this is a list of strings.
+        """
+        
+        self.fold = fold
+        self.tail = tail
+        self.variables = variables
+        
+    def fit(self, X, y=None):
+        
+        X_ = X.copy()                # so we do not alter the input data
+        self.upper_thresholds_ = []  # A list to store upper thresholds
+        self.lower_thresholds_ = []  # A list to store lower thresholds
+        
+        if self.variables == None:
+            self.ixs_ = list(range(X_.shape[1]))  # all indexes
+            
+        # check if the list is full of strings and the data is a dataframe...
+        elif all(isinstance(var, str) for var in self.variables) and isinstance(X_, pd.DataFrame):
+            # ...if so then get the indexes of the variables
+            self.ixs_ = [X_.columns.get_loc(var) for var in self.variables if var in X_]
+        
+        elif all(isinstance(var, int) for var in self.variables) and isinstance(X_, (np.ndarray, np.generic)):
+            self.ixs_ = self.variables
+        
+        else:
+            warnings.warn("""if variables is not None, then it needs to be a list of ints if the input is a numpy array.
+            If the input is a pandas dataframe, then it needs to be a list of strings.
+            """)
+        
+        if isinstance(X_, pd.DataFrame):
+            # turn the data into a numpy array
+            X_ = X_.values
+        
+        for i in self.ixs_:
+            upper_quant = pd.Series(X_[:,i]).quantile(0.75)
+            lower_quant = pd.Series(X_[:,i]).quantile(0.25)
+            IQR = upper_quant - lower_quant
+            
+            if self.tail == 'left':
+                self.lower_thresholds_.append(lower_quant - (IQR * self.fold))
+                
+            elif self.tail == 'right':
+                self.upper_thresholds_.append(upper_quant + (IQR * self.fold))
+            
+            elif self.tail == 'both':
+                self.lower_thresholds_.append(lower_quant - (IQR * self.fold))
+                self.upper_thresholds_.append(upper_quant + (IQR * self.fold))
+            
+            else:
+                warnings.warn("tail needs to be in ['left', 'right', 'both']")
+                
+        return self
+        
+    def transform(self, X, y=None):
+        X_ = X.copy()
+        
+        # turn to a numpy array if a pandas df
+        if isinstance(X, pd.DataFrame):
+            X_ = X_.values
+        
+        for thresh_i, i in enumerate(self.ixs_):  
+            if self.tail in ['both', 'left']:
+                X_[:,i] = np.where(X_[:,i] < self.lower_thresholds_[thresh_i], np.nan, X_[:,i])
+                
+            if self.tail in ['both', 'right']:
+                X_[:,i] = np.where(X_[:,i] > self.upper_thresholds_[thresh_i], np.nan, X_[:,i])
+        
+        return X_
+    
+capper = IQR_limits(tail="right", variables = range(8))
+capper.fit(X_train)
+display(capper.upper_thresholds_)
+X_train_ = capper.transform(X_train)
+
+pd.DataFrame(X_train_, columns=features).iloc[:,range(8)].max()
+###week02_ex15_switch_md
+__Note__
+- My one above has a few extra bells and whistles (e.g. `variables`) that are not required to get this working.
+###week02_ex15_end
+
+###week02_ex16_start_py
+NA = NARemover()
+X_train_drop1, y_train_drop1 = NA.fit_resample(X_train, y_train)
+X_train_drop2, y_train_drop2 = NA.fit_resample(X_train_iqr, y_train)
+
+display(X_train.shape)
+display(y_train.shape)
+
+display(X_train_drop1.shape)
+display(y_train_drop1.shape)
+
+display(X_train_drop2.shape)
+display(y_train_drop2.shape)
+###week02_ex16_end
+
+###week02_ex17_start_py
+num_imputer = SimpleImputer(strategy="mean")
+
+imputer = ColumnTransformer([
+    # apply the `num_imputer` to all columns apart from the last
+    ("num", num_imputer, list(range(X_train.shape[1]-1))), 
+    # apply the `cat_imputer` to the last column
+    ("cat", cat_imputer, [X_train.shape[1]-1]),
+]) 
+
+print("Means Before IQR")
+X_train_ = imputer.fit(X_train)
+display(imputer.transformers_[0][1].statistics_)
+
+print("Means After IQR")
+X_train_ = imputer.fit(X_train_iqr)
+display(imputer.transformers_[0][1].statistics_)
+###week02_ex17_end
+
+###week02_ex19_start_py
+from sklearn.preprocessing import OrdinalEncoder
+ordinal_encoder = OrdinalEncoder()
+encoder = ColumnTransformer([
+    # apply the `num_imputer` to all columns apart from the last
+    ("num", "passthrough", list(range(X_train.shape[1]-1))), 
+    # apply the `cat_imputer` to the last column
+    ("cat", ordinal_encoder, [X_train.shape[1]-1]),
+]) 
+housing_cat_encoded = encoder.fit_transform(X_train) 
+
+display(dict(zip(list(encoder.transformers_[1][1].categories_[0]),range(5))))
+
+from sklearn.preprocessing import OneHotEncoder 
+OHE = OneHotEncoder()
+
+encoder = ColumnTransformer([
+    # apply the `num_imputer` to all columns apart from the last
+    ("num", "passthrough", list(range(X_train.shape[1]-1))), 
+    # apply the `cat_imputer` to the last column
+    ("cat", OHE, [X_train.shape[1]-1]),
+]) 
+housing_cat_1hot = encoder.fit_transform(X_train) 
+cats = pd.Series(X_train[:,-1]).unique()
+pd.DataFrame(encoder.transformers_[1][1].transform(cats.reshape(-1, 1)).toarray(), columns = cats).astype(int)
+###week02_ex19_switch_md
+The `OrdinalEncoder` assumes that two nearby values are more similar than two distant values. If we had ordinal variables this would be fine (e.g. "bad", "average", "good"), but this is not the case here. A common solution here is to use a `OneHotEncoder` to assign a binary attribute per category. For example the first attribute will have a 1 if the category for the observation is `'<1H OCEAN'` and 0 otherwise, the second 1 if the category is `'INLAND'` and 0 otherwise, ect.
+###week02_ex19_end
+
+###week02_ex20_start_md
+In our data, `total_rooms`, `total_bedrooms`, `population`, `housholds` are all counts and, alike to most counts, are right skewed.
+###week02_ex20_end
+
+###week02_ex21_start_md
+Lets use with `households` and start with fixed-width binning.
+###week02_ex21_switch_py
+fig = plt.figure(figsize=(15,5))
+sns.histplot(data=X_train[:,6])
+plt.show()
+###week02_ex21_switch_md
+Looking above, it seems most of the households look to be between 1 and 1000. So maybe we want to divide our data up into fixed bins of 100 and group everything else after 1000?
+###week02_ex21_switch_py
+households_binned = np.digitize(X_train[:,6], range(0,1100,100))
+
+sns.countplot(x = (households_binned-1)*100)
+plt.show()
+###week02_ex21_switch_md
+If we wanted to divide the data into quantiles to adaptively position the bins we could do the following.
+###week02_ex21_switch_py
+fig, axes = plt.subplots(figsize=(15,10), nrows=2)
+sns.histplot(data=X_train[:,6], ax=axes[0])
+
+deciles = pd.Series(X_train[:,6]).quantile([.1, .2, .3, .4, .5, .6, .7, .8, .9, .10])
+for pos in deciles:
+    axes[0].axvline(pos, color='r')
+    
+cuts = pd.qcut(X_train[:,6], 10, labels=False)
+sns.countplot(x=cuts+1, ax=axes[1])
+axes[1].set_xlabel("quantile")
+plt.show()
+###week02_ex21_switch_md
+Although no longer normally distributed this still maybe useful, although for interpretability I would go for the former method.
+###week02_ex21_end
+
+###week02_ex22_start_py
+from scipy import stats
+
+fig, axes = plt.subplots(figsize=(15,5), ncols = 4, nrows=2, sharey=True)
+axes = axes.flatten()
+sns.histplot(data=X_train[:,6], ax=axes[0])
+axes[0].set_title("Raw Counts")
+for i, lmbda in enumerate([0,0.25,0.5,0.75,1.,1.25,1.5]):
+    
+    house_box_ = stats.boxcox(X_train[:,6].astype(float), lmbda=lmbda)
+    sns.histplot(data=house_box_, ax=axes[i+1])
+    axes[i+1].set_title("$\lambda$ = {}".format(lmbda))
+    
+plt.tight_layout()
+plt.show()
+###week02_ex22_switch_md
+Looking at the plots above, between lambda = 0 (the log transform) and 0.25 will likely be useful. Indeed, finding a lambda that maximizes the log-likelihood function returns a value of 0.24.
+###week02_ex22_switch_py
+house_box_, bc_params = stats.boxcox(X_train[:,6].astype(float), lmbda=None)
+round(bc_params, 2)
+###week02_ex22_switch_md
+This is also supported by if we look at the probability plots of the original and transformed counts against the normal distribution.
+###week02_ex22_switch_py
+# adapted from Feature Engineering for Machine Learning principles and 
+# techniques for data scientists
+fig2, (ax1, ax2, ax3) = plt.subplots(3,1, figsize=(15,10), sharex=True) 
+prob1 = stats.probplot(X_train[:,6].astype(float), dist=stats.norm, plot=ax1)
+ax1.set_xlabel('') 
+ax1.set_title('Probplot of raw counts against normal distribution') 
+
+house_box_ = stats.boxcox(X_train[:,6].astype(float), lmbda=0.)
+prob2 = stats.probplot(house_box_, dist=stats.norm, plot=ax2) 
+ax2.set_xlabel('') 
+ax2.set_title('Probplot after log transform')
+
+house_box_ = stats.boxcox(X_train[:,6].astype(float), lmbda=bc_params)
+prob3 = stats.probplot(house_box_, dist=stats.norm, plot=ax3) 
+ax3.set_xlabel('') 
+ax3.set_title('Probplot after boxcox transform')
+
+plt.tight_layout()
+plt.show()
+###week02_ex22_end
+
+###week02_ex23_start_py
+from sklearn.preprocessing import FunctionTransformer
+
+def boxcoxarray(X, y=None, lmbda=None):
+    X_ = X.copy()
+    for i in range(X.shape[1]):
+        if lmbda==None:
+            X_[:,i], bc_params_ = stats.boxcox(X_[:,i], lmbda=lmbda)
+        else:
+            X_[:,i] = stats.boxcox(X_[:,i], lmbda=lmbda)
+    return X_
+
+boxtransformer = FunctionTransformer(boxcoxarray, validate=True)
+
+box_pipe = Pipeline([
+    ("remove_na", SimpleImputer(strategy="median")),  # need to remove the NA's first
+    ("interactions", boxtransformer),
+])
+
+# don't want to apply it to longitude, latitude, or housing_median_age
+X_train_box = box_pipe.fit_transform(X_train[:,3:-1], y_train)
+X_train_box
+###week02_ex23_end
+
+###week02_ex24_start_py
+def create_features(X, rooms_ix, bedrooms_ix, population_ix, households_ix, 
+                    add_rph=True, add_pph=True, add_bpr=True, drop_indiv=False):
+    X_ = X.copy()
+    to_add = []
+    
+    if add_rph:
+        rooms_per_household = X_[:, rooms_ix] / X_[:, households_ix]
+        to_add.append(rooms_per_household.reshape(-1,1))
+    
+    if add_pph:
+        population_per_household = X_[:, population_ix] / X_[:, households_ix]
+        to_add.append(population_per_household.reshape(-1,1))
+        
+    if add_bpr:
+        bedrooms_per_room = X_[:, bedrooms_ix] / X_[:, rooms_ix]
+        to_add.append(bedrooms_per_room.reshape(-1,1))
+        
+    if drop_indiv:
+        X_ = np.delete(X_, [rooms_ix, bedrooms_ix, population_ix, households_ix], axis=1)
+        
+    to_add.append(X_)
+    
+    return np.hstack(to_add)
+
+col_names = "total_rooms", "total_bedrooms", "population", "households"
+rooms_ix, bedrooms_ix, population_ix, households_ix = [
+    explore_set.columns.get_loc(c) for c in col_names] 
+
+new_features = create_features(X_train, rooms_ix, bedrooms_ix, population_ix, households_ix)
+###week02_ex24_switch_md
+The above may be useful and meaningful, indeed some of these combinations are more correlated to the target than the features individually.
+###week02_ex24_switch_py
+new_features_na_rm = pd.DataFrame(new_features, 
+                                  columns = ["rooms_per_household", 
+                                             "population_per_household", 
+                                             "bedrooms_per_room"]+features).dropna()
+all_corr=pd.DataFrame()
+for i, feature in enumerate(explore_set_):
+    if not str(explore_set_na_rm[feature].dtypes) == "object":
+        corr = pd.DataFrame(stats.pearsonr(explore_set_na_rm[feature], explore_set_na_rm[y_attribute]), 
+                            index = ["cor", "p-value"],
+                            columns = [feature])
+        if i ==0:
+            all_corr = corr
+        else:
+            all_corr = pd.concat([all_corr, corr], axis = 1)
+        
+display(all_corr.round(3).sort_values(by="cor", axis=1).T)
+###week02_ex24_end
+
+###week02_ex25_start_py
+FeatureTransformer = FunctionTransformer(create_features, kw_args={"rooms_ix": rooms_ix,
+                                                                   "bedrooms_ix": bedrooms_ix,
+                                                                   "population_ix": population_ix, 
+                                                                   "households_ix": households_ix})
+X_train_ = FeatureTransformer.fit_transform(X_train)
+###week02_ex25_end
+
+###week02_ex26_start_py
+# https://github.com/ageron/handson-ml2/blob/master/02_end_to_end_machine_learning_project.ipynb
+
+class CombinedAttributesAdder(BaseEstimator, TransformerMixin):
+    def __init__(self, rooms_ix, bedrooms_ix, population_ix, 
+                 households_ix, add_rph=True, add_pph=True, 
+                 add_bpr=True, drop_indiv=False): # no *args or **kargs
+        self.rooms_ix = rooms_ix
+        self.bedrooms_ix = bedrooms_ix
+        self.population_ix = population_ix
+        self.households_ix = households_ix
+        self.add_rph = add_rph
+        self.add_pph = add_pph
+        self.add_bpr = add_bpr
+        self.drop_indiv = drop_indiv
+    
+    def fit(self, X, y=None):
+        self.added_feature_names_ = []
+        
+        if self.add_rph:
+            self.added_feature_names_.append("rooms_per_household")
+    
+        if self.add_pph:
+            self.added_feature_names_.append("population_per_household")
+
+        if self.add_bpr:
+            self.added_feature_names_.append("bedrooms_per_room")
+            
+        return self  # nothing else to do
+    
+    def transform(self, X):
+        X_ = X.copy()
+        
+        return create_features(X_, self.rooms_ix, self.bedrooms_ix, 
+                               self.population_ix, self.households_ix,
+                               self.add_rph, self.add_pph, self.add_bpr,
+                               self.drop_indiv)
+
+
+attr_adder = CombinedAttributesAdder(rooms_ix, bedrooms_ix, 
+                                     population_ix, households_ix)
+housing_extra_attribs = attr_adder.fit_transform(X_train)
+
+housing_extra_attribs = pd.DataFrame(
+    housing_extra_attribs,
+    columns=attr_adder.added_feature_names_+list(features))
+housing_extra_attribs.head()
+###week02_ex26_end
+
+###week02_ex27_start_py
+from sklearn.preprocessing import PolynomialFeatures
+from imblearn.pipeline import Pipeline
+
+# Polynomial Features
+interactions = PolynomialFeatures(include_bias=False)
+
+interaction_pipe = Pipeline([
+    ("remove_na", na_sampler),  # need to remove the NA's first
+    ("interactions", interactions),
+])
+
+X_train_inter = interaction_pipe.fit_transform(X_train[:,:-1], y_train)
+
+feature_names = interaction_pipe.named_steps['interactions'].get_feature_names(list(features))
+display(pd.DataFrame(X_train_inter, columns = feature_names))
+
+# Only Interactions
+interactions = PolynomialFeatures(interaction_only=True, include_bias=False)
+
+interaction_pipe = Pipeline([
+    ("remove_na", na_sampler),  # need to remove the NA's first
+    ("interactions", interactions),
+])
+
+X_train_inter = interaction_pipe.fit_transform(X_train[:,:-1], y_train)
+
+feature_names = interaction_pipe.named_steps['interactions'].get_feature_names(list(features))
+display(pd.DataFrame(X_train_inter, columns = feature_names))
+###week02_ex27_end
+
+###week02_ex28_start_md
+The different standardization methods available in scikit-learn currently (0.24.1) are:
+
+- Standardization (`preprocessing.StandardScaler`)
+
+- Min-Max Scaling (`preprocessing.MinMaxScaler`)
+
+- l2 Normalization (`preprocessing.normalize`)
+
+- RobustScaler(`preprocessing.RobustScaler`)
+
+- Scale with maximum absolute value (`preprocessing.MaxAbsScaler`)
+###week02_ex28_end
+
+###week02_ex29_start_py
+# Todo
+###week02_ex29_end
+
+###week02_ex30_start_py
+from sklearn.model_selection import cross_validate
+
+# tidy the output into a dataframe
+def tidy_scores(score_dict):
+    df = pd.DataFrame(score_dict)
+    df.loc['mean'] = df.mean()
+    df.loc['sd'] = df.std()
+    df.rename({"test_score":"val_score"}, axis=1, inplace=True)
+    df.index.name = "fold"
+    return df.round(2)
+
+scores = cross_validate(reg_pipe_1, X_train, y_train, cv=5, return_train_score=True)
+tidy_scores(scores)
+###week02_ex30_end
+
+###week02_ex31_start_py
+# NOTE: To get this answer to work you'll need to run some of the
+# functions I created to answer some earlier questions.
+
+# Reg Pipe 2
+num_pre = Pipeline([
+    ("num_impute", SimpleImputer(strategy="median")),
+    ("num_scale", StandardScaler())])
+
+count_pre = Pipeline([
+    ("num_impute", SimpleImputer(strategy="median")),
+    ("num_add", CombinedAttributesAdder(0,1,2,3, drop_indiv=True)),
+    ("num_transform", boxtransformer),
+    ("num_scale", StandardScaler())])
+
+cat_pre = Pipeline([
+    ("cat_impute", SimpleImputer(strategy="constant")),
+    ("cat_encode", OneHotEncoder())])
+
+reg_pipe_2 = Pipeline([
+    ("pre_processing", ColumnTransformer([
+        ("num_pre", num_pre, [0,1,2,7]),
+        ("count_pre", count_pre, [3,4,5,6]),
+        ("cat_pre", cat_pre, [8])])),
+    ("model", LinearRegression())
+])
+
+display(reg_pipe_2)
+
+scores = cross_validate(reg_pipe_2, X_train, y_train, cv=5, return_train_score=True)
+display(tidy_scores(scores))
+
+# Reg Pipe 3
+count_pre = Pipeline([
+    ("num_add", CombinedAttributesAdder(0,1,2,3, drop_indiv=True)),
+    ("num_transform", boxtransformer)])
+
+num_pre = Pipeline([
+    ("num_impute", SimpleImputer(strategy="median")),
+    ("comb_pipe", ColumnTransformer([("count_pre", count_pre, [3,4,5,6])],remainder="passthrough")),
+    ("poly", PolynomialFeatures(include_bias=False)),
+    ("num_scale", StandardScaler())
+])
+
+cat_pre = Pipeline([
+    ("cat_impute", SimpleImputer(strategy="constant")),
+    ("cat_encode", OneHotEncoder())])
+
+reg_pipe_3 = Pipeline([
+    ("pre_processing", ColumnTransformer([
+        ("comb_pre", num_pre, [0,1,2,3,4,5,6,7]),
+        ("cat_pre", cat_pre, [8])])),
+    ("model", LinearRegression())
+])
+
+display(reg_pipe_3)
+
+scores = cross_validate(reg_pipe_3, X_train, y_train, cv=5, return_train_score=True)
+display(tidy_scores(scores))
+###week02_ex31_end
+
+###week02_ex32_start_py
+reg_pipe_3.fit(X_train, y_train)
+
+X_test = test_set.drop("median_house_value", axis=1)
+X_test = X_test.values
+
+y_test = test_set["median_house_value"].copy()
+y_test = y_test.values
+
+print("Regression R-Squared (Test Set)")
+print(round(reg_pipe_3.score(X_test, y_test),3))
+###week02_ex32_end
